@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Lá Xanh Coffee — Trifold tương tác</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B1410; --ink-2:#2A1F16; --kraft:#C6AE7E; --paper:#F2EADA; --paper-2:#FBF7EE;
+    --stamp:#2E4A63; --stamp-2:#4A7096;
+    --panel-w: clamp(120px, min(31vw, 27vh), 215px);
+    --panel-h: calc(var(--panel-w) * 2.15);
+    --font-display:'Barlow Condensed','Arial Narrow',sans-serif;
+    --font-body:'Be Vietnam Pro',-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:radial-gradient(ellipse 70% 55% at 50% 38%, var(--ink-2), var(--ink) 75%);
+    font-family:var(--font-body); color:var(--paper);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:24px; padding:40px 16px 34px;
+  }
+
+  .eyebrow{
+    font-family:var(--font-display); font-weight:700; font-size:8.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--stamp); display:flex; align-items:center; gap:4px;
+  }
+  .eyebrow::before{ content:''; width:4px; height:4px; background:currentColor; flex:none; }
+
+  .intro{ text-align:center; max-width:460px; }
+  .intro .eyebrow{ justify-content:center; color:var(--stamp-2); font-size:12px; letter-spacing:.16em; }
+  .intro .eyebrow::before{ width:5px; height:5px; }
+  .intro-title{
+    font-family:var(--font-display); font-weight:700; font-size:clamp(20px,4.2vw,28px);
+    text-transform:uppercase; margin:6px 0 8px; color:var(--paper-2);
+  }
+  .intro p{ margin:0; font-size:13px; line-height:1.6; color:rgba(242,234,218,.7); }
+
+  .trifold-stage{ perspective:1300px; }
+  .trifold{
+    position:relative;
+    width:calc(var(--panel-w) * 3);
+    height:var(--panel-h);
+    transform-style:preserve-3d;
+    transform:rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg));
+    transition:transform .3s cubic-bezier(.22,.61,.36,1);
+    cursor:grab;
+    touch-action:pan-y;
+    user-select:none; -webkit-user-select:none;
+    filter:
+      drop-shadow(var(--shadow-x,0px) var(--shadow-y,26px) 32px rgba(0,0,0,.52))
+      drop-shadow(0 6px 10px rgba(0,0,0,.38));
+  }
+  .trifold:active{ cursor:grabbing; }
+
+  /* Lớp trong cùng — cố định, chỉ lộ khi mở hết */
+  .slot-c{
+    position:absolute; top:0; left:calc(var(--panel-w) * 2); width:var(--panel-w); height:100%;
+    z-index:1;
+    box-shadow:0 0 0 1px rgba(198,174,126,.5), inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+
+  /* Bản lề giữa — xoay quanh cạnh chung với slot-c */
+  .hinge-b{
+    position:absolute; top:0; left:var(--panel-w); width:var(--panel-w); height:100%;
+    transform-style:preserve-3d;
+    transform-origin:right center;
+    transform:rotateY(180deg);
+    backface-visibility:hidden;
+    z-index:2;
+    box-shadow:0 0 0 1px rgba(198,174,126,.5), inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+
+  /* Bản lề ngoài (tờ bìa) — LỒNG bên trong hinge-b, xoay quanh cạnh chung với hinge-b.
+     Nhờ lồng đúng cách, khi hinge-b gấp thì hinge-a bám theo, giống hệt giấy thật. */
+  .hinge-a{
+    position:absolute; top:0; left:-100%; width:100%; height:100%;
+    transform-style:preserve-3d;
+    transform-origin:right center;
+    transform:rotateY(180deg);
+    backface-visibility:hidden;
+    box-shadow:0 0 0 1px rgba(198,174,126,.5), inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+
+  @keyframes idle-nudge{
+    0%, 82%, 100% { transform:rotateY(180deg); }
+    88% { transform:rotateY(152deg); }
+    94% { transform:rotateY(170deg); }
+  }
+  .trifold.idle-hint #hingeB{ animation:idle-nudge 3.6s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){
+    .trifold.idle-hint #hingeB{ animation:none; }
+  }
+
+  .b-face, .a-face{ position:absolute; inset:0; overflow:hidden; }
+  .b-face::before, .a-face::before{
+    content:''; position:absolute; inset:0; pointer-events:none; z-index:5;
+    background:linear-gradient(to right, transparent 30%, rgba(0,0,0,.5) 100%);
+  }
+  .b-face::before{ opacity:var(--b-shadow, 0); }
+  .a-face::before{ opacity:var(--a-shadow, 0); }
+
+  .panel-face{
+    position:absolute; inset:0;
+    padding:16px 12px;
+    display:flex; flex-direction:column; gap:7px;
+    background:
+      repeating-linear-gradient(91deg, rgba(0,0,0,.025) 0 1px, transparent 1px 4px),
+      var(--paper);
+    transition:opacity .3s ease;
+    overflow:hidden;
+  }
+  .back-face{ opacity:0; pointer-events:none; }
+  .trifold.show-back .front-face{ opacity:0; pointer-events:none; }
+  .trifold.show-back .back-face{ opacity:1; pointer-events:auto; }
+
+  .panel-face.dark{
+    background:linear-gradient(165deg, var(--ink), var(--ink-2));
+    align-items:center; text-align:center; justify-content:center;
+  }
+  .panel-face.dark .eyebrow{ color:var(--kraft); justify-content:center; }
+  .panel-face.dark h3{ color:var(--paper-2) !important; }
+
+  .panel-face h3{
+    font-family:var(--font-display); font-weight:700; font-size:14px; line-height:1.15;
+    margin:0; color:var(--ink); text-transform:uppercase;
+  }
+  .body-text{ font-size:9px; line-height:1.5; color:rgba(27,20,16,.72); margin:0; }
+
+  .stamp{
+    width:64px; height:64px; border-radius:50%; border:1.8px solid var(--stamp-2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transform:rotate(-8deg); position:relative; color:var(--stamp-2); margin-bottom:10px;
+  }
+  .stamp::before{
+    content:''; position:absolute; inset:5px; border-radius:50%;
+    border:1.2px dashed var(--stamp-2); opacity:.55;
+  }
+  .stamp-leaf{ width:15px; height:15px; }
+  .stamp-line1{ font-family:var(--font-display); font-weight:700; font-size:7.5px; letter-spacing:.04em; margin-top:1px; }
+  .cv-word{
+    font-family:var(--font-display); font-weight:800; font-size:16px; line-height:1.1;
+    color:var(--paper-2); text-transform:uppercase;
+  }
+  .cv-tag{ font-size:8.5px; color:var(--kraft); margin:8px 0 0; line-height:1.4; }
+
+  .mini-stats{ display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px dashed rgba(27,20,16,.2); }
+  .mini-stats div{ flex:1; text-align:center; }
+  .mini-stats strong{ display:block; font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--stamp); }
+  .mini-stats span{ display:block; font-size:7px; color:rgba(27,20,16,.6); }
+
+  .mini-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .mini-list li{ display:flex; justify-content:space-between; gap:4px; font-size:9.5px; border-bottom:1px dotted rgba(27,20,16,.25); padding-bottom:5px; color:rgba(27,20,16,.85); }
+  .mini-list li b{ font-family:var(--font-display); color:var(--stamp); font-weight:700; white-space:nowrap; }
+
+  .contact-mini{ display:flex; flex-direction:column; gap:5px; font-size:9px; color:rgba(242,234,218,.85); margin-top:4px; }
+  .qr-box{
+    margin-top:auto; align-self:center; width:40px; height:40px; border-radius:2px;
+    border:1.2px dashed rgba(242,234,218,.4); display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:10px; color:var(--paper-2);
+  }
+
+  .photo-mini{
+    height:32px; border:1.3px dashed var(--kraft); border-radius:2px;
+    display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.5);
+  }
+  .photo-mini .plus{ font-family:var(--font-display); font-size:13px; color:var(--kraft); font-weight:600; }
+  .hint-text{ font-size:7.5px; color:rgba(27,20,16,.45); margin:2px 0 0; }
+
+  .quote-mini{
+    font-size:9.5px; line-height:1.42; color:rgba(27,20,16,.82);
+    border-left:2px solid var(--stamp); padding-left:6px; font-style:italic;
+  }
+  .quote-mini span{ display:block; margin-top:3px; font-family:var(--font-display); font-weight:600; font-size:8px; color:var(--stamp); font-style:normal; }
+  .promo-mini{
+    margin-top:auto; font-size:8px; text-align:center; line-height:1.4;
+    border:1.3px dashed var(--stamp); border-radius:2px; padding:6px; color:rgba(27,20,16,.7);
+  }
+
+  .controls{ display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .controls-row{ display:flex; align-items:center; gap:10px; }
+  .primary-btn{
+    font-family:var(--font-display); font-weight:700; font-size:13px; letter-spacing:.06em;
+    text-transform:uppercase; padding:11px 24px; border-radius:2px;
+    background:var(--stamp-2); color:var(--paper-2); border:none; cursor:pointer;
+    transition:background .15s;
+  }
+  .primary-btn:hover{ background:var(--stamp); }
+  .sound-btn{
+    width:36px; height:36px; border-radius:50%; border:1.5px solid rgba(242,234,218,.3);
+    background:transparent; color:var(--paper); cursor:pointer; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s;
+  }
+  .sound-btn:hover{ background:rgba(242,234,218,.1); }
+  .sound-btn .mute-slash{ opacity:0; transition:opacity .15s; }
+  .sound-btn.muted .wave1, .sound-btn.muted .wave2{ opacity:0; transition:opacity .15s; }
+  .sound-btn.muted .mute-slash{ opacity:1; }
+  .side-toggle{
+    display:flex; gap:2px; background:rgba(242,234,218,.08); border-radius:3px; padding:2px;
+    transition:opacity .2s;
+  }
+  .side-btn{
+    font-family:var(--font-display); font-weight:600; font-size:11px; letter-spacing:.04em;
+    padding:7px 14px; border-radius:2px; border:none; background:transparent;
+    color:rgba(242,234,218,.6); cursor:pointer; text-transform:uppercase;
+  }
+  .side-btn.active{ background:var(--paper-2); color:var(--ink); }
+  button:focus-visible{ outline:2px solid var(--stamp-2); outline-offset:2px; }
+
+  .tip{ max-width:420px; text-align:center; font-size:11px; color:rgba(242,234,218,.45); line-height:1.6; }
+  .tip code{ background:rgba(242,234,218,.1); padding:1px 5px; border-radius:3px; font-size:10.5px; color:var(--kraft); }
+
+  .drag-hint{
+    font-family:var(--font-display); font-weight:600; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--kraft);
+    display:flex; align-items:center; gap:7px;
+    transition:opacity .4s ease, max-height .4s ease, margin .4s ease;
+    max-height:20px; overflow:hidden;
+  }
+  .drag-hint.hint-hidden{ opacity:0; max-height:0; margin:-14px 0 0; }
+  .drag-hint-arrow{ display:inline-block; animation:hint-pulse 1.3s ease-in-out infinite; }
+  @keyframes hint-pulse{
+    0%,100%{ transform:translateX(0); opacity:.55; }
+    50%{ transform:translateX(-6px); opacity:1; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="intro">
+    <span class="eyebrow">Demo tương tác</span>
+    <div class="intro-title">Trifold — Lá Xanh Coffee</div>
+    <p>Kéo một lần liền mạch: nửa đầu mở tờ ngoài, kéo tiếp mở nốt tờ trong — đúng như gấp/mở brochure thật, không phải bấm nút rời rạc.</p>
+  </div>
+
+  <div class="trifold-stage">
+    <div class="trifold idle-hint" id="trifold">
+
+      <div class="slot-c" id="slotC">
+        <div class="panel-face front-face">
+          <span class="eyebrow">Thực đơn</span>
+          <h3>Sản phẩm nổi bật</h3>
+          <ul class="mini-list">
+            <li><span>Cà phê sữa đá</span><b>29K</b></li>
+            <li><span>Bạc xỉu</span><b>32K</b></li>
+            <li><span>Cold Brew</span><b>39K</b></li>
+            <li><span>Trà đào cam sả</span><b>35K</b></li>
+          </ul>
+        </div>
+        <div class="panel-face back-face">
+          <span class="eyebrow">Khách nói gì</span>
+          <div class="quote-mini">"Cà phê ngon, không gian dễ chịu để ngồi làm việc."<span>— Minh Anh</span></div>
+          <div class="quote-mini">"Bạc xỉu ở đây ngon nhất mình từng uống."<span>— Gia Huy</span></div>
+          <div class="promo-mini">Giảm 10% cho hoá đơn từ 100.000đ</div>
+        </div>
+      </div>
+
+      <div class="hinge-b" id="hingeB">
+        <div class="b-face">
+          <div class="panel-face front-face">
+            <span class="eyebrow">Về chúng tôi</span>
+            <h3>Câu chuyện Lá Xanh</h3>
+            <p class="body-text">Rang xay mỗi ngày từ nông trại Tây Nguyên — một ly cà phê ngon luôn bắt đầu từ sự tử tế.</p>
+            <div class="mini-stats">
+              <div><strong>8</strong><span>năm</span></div>
+              <div><strong>12</strong><span>chi nhánh</span></div>
+            </div>
+          </div>
+          <div class="panel-face back-face">
+            <span class="eyebrow">Không gian</span>
+            <h3>Góc chill giữa phố</h3>
+            <div class="photo-mini"><span class="plus">+</span></div>
+            <div class="photo-mini"><span class="plus">+</span></div>
+            <p class="hint-text">Thay bằng ảnh thật của quán bạn</p>
+          </div>
+        </div>
+
+        <div class="hinge-a" id="hingeA">
+          <div class="a-face">
+            <div class="panel-face front-face dark">
+              <div class="stamp">
+                <svg class="stamp-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                  <path d="M12 20C12 20 5 16.5 5 9.5C5 6 7.8 4 12 4C16.2 4 19 6 19 9.5C19 16.5 12 20 12 20Z"/>
+                  <path d="M12 20V8.5"/>
+                </svg>
+                <span class="stamp-line1">LÁ XANH</span>
+              </div>
+              <div class="cv-word">CÀ PHÊ<br>LÁ XANH</div>
+              <p class="cv-tag">Kéo để<br>khám phá</p>
+            </div>
+            <div class="panel-face back-face dark">
+              <span class="eyebrow">Liên hệ</span>
+              <h3>Ghé thăm chúng tôi</h3>
+              <div class="contact-mini">
+                <div>123 Nguyễn Huệ, Q.1, TP.HCM</div>
+                <div>1900 6868</div>
+                <div>laxanhcoffee.vn</div>
+              </div>
+              <div class="qr-box">QR</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="drag-hint" id="dragHint"><span class="drag-hint-arrow">⟵</span>Kéo tờ giấy để mở</div>
+
+  <div class="controls">
+    <div class="controls-row">
+      <button class="primary-btn" id="toggleBtn" type="button">Mở brochure ra</button>
+      <button class="sound-btn" id="soundBtn" type="button" aria-label="Tắt âm thanh">
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <polygon points="3,9 3,15 8,15 13,20 13,4 8,9" fill="currentColor"/>
+          <path class="wave1" d="M16.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path class="wave2" d="M19.3 6a9 9 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <line class="mute-slash" x1="2" y1="21" x2="21" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="side-toggle" id="sideToggle">
+      <button class="side-btn active" id="frontBtn" type="button">Mặt trước</button>
+      <button class="side-btn" id="backBtn" type="button">Mặt sau</button>
+    </div>
+  </div>
+
+  <p class="tip">3 tờ được lồng đúng theo bản lề thật: <code>slot-c</code> (trong cùng) ← <code>hinge-b</code> (giữa) ← <code>hinge-a</code> (bìa, lồng bên trong hinge-b). Sửa chữ trực tiếp trong từng khối <code>panel-face</code>.</p>
+
+<script>
+  const trifold = document.getElementById('trifold');
+  const trifoldStage = document.querySelector('.trifold-stage');
+  const hingeB = document.getElementById('hingeB');
+  const hingeA = document.getElementById('hingeA');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const sideToggle = document.getElementById('sideToggle');
+  const frontBtn = document.getElementById('frontBtn');
+  const backBtn = document.getElementById('backBtn');
+  const dragHint = document.getElementById('dragHint');
+
+  const BOUNCE = 'cubic-bezier(.34,1.56,.64,1)';
+
+  let progress = 0;        // 0 = đóng hẳn · 1 = mở lớp ngoài (2 tờ) · 2 = mở hết (3 tờ)
+  let showBack = false;
+  let dragging = false;
+  let pointerMoved = false;
+  let dragStartX = 0;
+  let dragStartProgress = 0;
+  let hasInteracted = false;
+  let soundEnabled = true;
+  let audioCtx = null;
+
+  function ensureAudioCtx(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  // Tổng hợp tiếng "xoẹt" giấy bằng nhiễu trắng lọc qua dải tần quét động —
+  // không dùng file âm thanh có sẵn nên không phụ thuộc mạng, không lo bản quyền.
+  function playFlipSound(opening){
+    if(!soundEnabled) return;
+    const ctx = ensureAudioCtx();
+    if(!ctx) return;
+    const now = ctx.currentTime;
+
+    // Lớp "xoẹt" chính
+    const dur = 0.3;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 0.9;
+    const f1 = opening ? 1300 : 2300;
+    const f2 = opening ? 2700 : 950;
+    band.frequency.setValueAtTime(f1, now);
+    band.frequency.exponentialRampToValueAtTime(f2, now + dur * 0.85);
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 450;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.5, now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    noise.connect(band); band.connect(hp); hp.connect(gain); gain.connect(ctx.destination);
+    noise.start(now); noise.stop(now + dur);
+
+    // Lớp "tách" ngắn ở đầu cho giòn tiếng, giống cái flick cổ tay khi lật giấy
+    const tickDur = 0.035;
+    const tickBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * tickDur), ctx.sampleRate);
+    const tickData = tickBuf.getChannelData(0);
+    for(let i = 0; i < tickData.length; i++) tickData[i] = (Math.random() * 2 - 1) * (1 - i / tickData.length);
+    const tick = ctx.createBufferSource();
+    tick.buffer = tickBuf;
+    const tickHp = ctx.createBiquadFilter();
+    tickHp.type = 'highpass';
+    tickHp.frequency.value = 3200;
+    const tickGain = ctx.createGain();
+    tickGain.gain.setValueAtTime(0.3, now);
+    tickGain.gain.exponentialRampToValueAtTime(0.0001, now + tickDur);
+    tick.connect(tickHp); tickHp.connect(tickGain); tickGain.connect(ctx.destination);
+    tick.start(now); tick.stop(now + tickDur);
+  }
+
+  function panelWidthPx(){
+    return hingeB.getBoundingClientRect().width || 150;
+  }
+
+  // Vẽ trực tiếp góc xoay của TỪNG bản lề + bóng đổ động, dựa trên progress liên tục 0..2
+  function paint(p){
+    const bp = Math.max(0, Math.min(1, p));       // tiến trình riêng của hinge-b
+    const ap = Math.max(0, Math.min(1, p - 1));    // tiến trình riêng của hinge-a (chỉ chạy sau khi bp=1)
+    const bAngle = 180 * (1 - bp);
+    const aAngle = 180 * (1 - ap);
+    hingeB.style.transform = `rotateY(${bAngle}deg)`;
+    hingeA.style.transform = `rotateY(${aAngle}deg)`;
+    const bShadow = Math.sin(bp * Math.PI); // đỉnh khi tờ đó vuông góc với người xem
+    const aShadow = Math.sin(ap * Math.PI);
+    trifold.style.setProperty('--b-shadow', bShadow.toFixed(3));
+    trifold.style.setProperty('--a-shadow', aShadow.toFixed(3));
+  }
+
+  function setTransition(on, delayB, delayA){
+    if(!on){
+      hingeB.style.transition = 'none';
+      hingeA.style.transition = 'none';
+      return;
+    }
+    hingeB.style.transition = `transform .55s ${BOUNCE} ${delayB||0}s`;
+    hingeA.style.transition = `transform .55s ${BOUNCE} ${delayA||0}s`;
+  }
+
+  function markInteracted(){
+    ensureAudioCtx();
+    if(hasInteracted) return;
+    hasInteracted = true;
+    trifold.classList.remove('idle-hint');
+    dragHint.classList.add('hint-hidden');
+  }
+
+  function currentStage(){
+    if(progress <= 0.01) return 0;
+    if(progress >= 1.99) return 2;
+    return 1;
+  }
+
+  function updateUI(){
+    const st = currentStage();
+    toggleBtn.textContent = st >= 2 ? 'Gấp lại' : (st === 0 ? 'Mở brochure ra' : 'Mở tiếp');
+    const anyOpen = progress > 0.01;
+    sideToggle.style.opacity = anyOpen ? '1' : '.35';
+    sideToggle.style.pointerEvents = anyOpen ? 'auto' : 'none';
+    frontBtn.classList.toggle('active', !showBack);
+    backBtn.classList.toggle('active', showBack);
+    trifold.classList.toggle('show-back', showBack);
+  }
+
+  function snapTo(target){
+    const opening = target > progress;
+    const changed = Math.abs(target - progress) > 0.02;
+    if(target <= 0.01) showBack = false;
+    setTransition(true, opening ? .1 : 0, opening ? 0 : .1);
+    progress = target;
+    paint(progress);
+    updateUI();
+    if(changed) playFlipSound(opening);
+  }
+
+  // --- Kéo-thả liên tục bằng con trỏ/ngón tay ---
+  trifold.addEventListener('pointerdown', (e)=>{
+    dragging = true;
+    pointerMoved = false;
+    dragStartX = e.clientX;
+    dragStartProgress = progress;
+    setTransition(false);
+    trifold.setPointerCapture(e.pointerId);
+    markInteracted();
+  });
+
+  trifold.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - dragStartX;
+    if(Math.abs(dx) > 4) pointerMoved = true;
+    const range = panelWidthPx() * 1.1;
+    const delta = -dx / range; // kéo trái => mở
+    progress = Math.min(2, Math.max(0, dragStartProgress + delta));
+    paint(progress);
+  });
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    if(!pointerMoved){
+      snapTo(progress > 1 ? 0 : 2);
+    } else {
+      let target;
+      if(progress < 0.5) target = 0;
+      else if(progress < 1.5) target = 1;
+      else target = 2;
+      snapTo(target);
+    }
+  }
+  trifold.addEventListener('pointerup', endDrag);
+  trifold.addEventListener('pointercancel', endDrag);
+
+  toggleBtn.addEventListener('click', ()=>{
+    markInteracted();
+    snapTo(progress > 1 ? 0 : 2);
+  });
+  frontBtn.addEventListener('click', ()=>{ showBack = false; updateUI(); });
+  backBtn.addEventListener('click', ()=>{ showBack = true; updateUI(); });
+  soundBtn.addEventListener('click', ()=>{
+    soundEnabled = !soundEnabled;
+    soundBtn.classList.toggle('muted', !soundEnabled);
+    soundBtn.setAttribute('aria-label', soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh');
+    if(soundEnabled) ensureAudioCtx();
+  });
+
+  // --- Nghiêng 3D toàn khối theo vị trí con trỏ (chỉ chuột, để yên khi đang kéo gấp) ---
+  function updateTilt(clientX, clientY){
+    const rect = trifoldStage.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const nx = Math.max(-1, Math.min(1, (clientX - cx) / (rect.width * 0.85)));
+    const ny = Math.max(-1, Math.min(1, (clientY - cy) / (rect.height * 0.85)));
+    trifold.style.setProperty('--tilt-y', (nx * 15).toFixed(2) + 'deg');
+    trifold.style.setProperty('--tilt-x', (-ny * 12).toFixed(2) + 'deg');
+    trifold.style.setProperty('--shadow-x', (nx * 18).toFixed(1) + 'px');
+    trifold.style.setProperty('--shadow-y', (26 - ny * 12).toFixed(1) + 'px');
+  }
+  document.addEventListener('pointermove', (e)=>{
+    if(dragging) return;
+    if(e.pointerType === 'touch') return;
+    updateTilt(e.clientX, e.clientY);
+  });
+
+  setTransition(false);
+  paint(0);
+  updateUI();
+</script>
+</body>
+</html>
